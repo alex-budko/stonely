@@ -1,19 +1,24 @@
 from django.db.models import Q
+from django.http import HttpResponse
 from django.shortcuts import render, redirect
 from django.contrib.auth.models import User
+from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from .models import Room, Topic
 from .forms import RoomForm
 
-# rooms = [
-#     {'id': 1, 'name': 'Lets Learn Python'},
-#     {'id': 2, 'name': 'Lets Learn Django'},
-#     {'id': 3, 'name': 'Lets Learn Go'},
-# ]
+
+
+
 def loginPage(request):
+    page = 'login'
+    if request.user.is_authenticated:
+        return redirect('home')
+
     if request.method == 'POST':
-        username = request.POST.get('username')
+        username = request.POST.get('username').lower()
         password = request.POST.get('password')
 
         try:
@@ -28,7 +33,29 @@ def loginPage(request):
             return redirect('home')
         else:
             messages.error(request, 'Username OR password does not exist')
-    context = {}
+    context = {'page': page}
+    return render(request, 'base/login_register.html', context)
+
+def logoutUser(request):
+    logout(request)
+    return redirect('home')
+
+def registerUser(request):
+    page = 'register'
+    form = UserCreationForm()
+    context = {'page': page, 'form':form}
+
+    if request.method == 'POST':
+        form = UserCreationForm(request.POST)
+        if form.is_valid():
+            user = form.save(commit=False)
+            user.username = user.username.lower()
+            user.save()
+            login(request, user)
+            return redirect('home')
+        else:
+            messages.error(request, 'An error occured during registration')
+
     return render(request, 'base/login_register.html', context)
 
 def home(request):
@@ -45,9 +72,12 @@ def home(request):
 
 def room(request, pk):
     room = Room.objects.get(id=pk)
-    context = {'room': room}
+    #filters by time created in descending order
+    room_messages = room.message_set.all().order_by('-created')
+    context = {'room': room, 'room_messages':room_messages}
     return render(request, 'base/room.html', context)
 
+@login_required(login_url='login')
 def createRoom(request):
     form = RoomForm()
 
@@ -60,9 +90,13 @@ def createRoom(request):
     context = {'form': form}
     return render(request, 'base/room_form.html', context)
 
+@login_required(login_url='login')
 def updateRoom(request, pk):
     room = Room.objects.get(id=pk)
     form = RoomForm(instance=room)
+
+    if request.user != room.host :
+        return HttpResponse('You do not have this permission')
 
     if request.method == 'POST':
         form = RoomForm(request.POST, instance=room)
@@ -73,7 +107,11 @@ def updateRoom(request, pk):
     context = {'form': form}
     return render(request, 'base/room_form.html', context)
 
+@login_required(login_url='login')
 def deleteRoom(request, pk):
+    if request.user != room.host :
+        return HttpResponse('You do not have this permission')
+
     room = Room.objects.get(id=pk)
     if request.method == 'POST':
         room.delete()
