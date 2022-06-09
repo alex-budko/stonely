@@ -103,7 +103,9 @@ def createRoom(request):
     if request.method == 'POST':
         form = RoomForm(request.POST)
         if form.is_valid():
-            form.save()
+            room = form.save(commit=False)
+            room.host = request.user
+            room.save()
             return redirect('home')
 
     context = {'form': form}
@@ -128,10 +130,11 @@ def updateRoom(request, pk):
 
 @login_required(login_url='login')
 def deleteRoom(request, pk):
-    if request.user != room.host :
+    room = Room.objects.get(id=pk)
+
+    if request.user != room.host:
         return HttpResponse('You do not have this permission')
 
-    room = Room.objects.get(id=pk)
     if request.method == 'POST':
         room.delete()
         return redirect('home')
